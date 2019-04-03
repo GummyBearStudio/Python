@@ -10,8 +10,11 @@ def getTuple(s):
 
 def tuplify(c, nms, tup):
     d = {n:c[n] for n in nms}
-    for n in tup:
-        d[n] = getTuple(d[n])
+    for n in nms:
+        if n in tup:
+            d[n] = getTuple(d[n])
+        else:
+            d[n] = float(d[n])
     return d
 
 # PHYSICS
@@ -23,30 +26,39 @@ NAMESIN = ["start", "mass", "radius", "friction", "velocity"]
 NAMESOUT = ["stop", "time"]
 DATA = pandas.read_csv("input.txt", sep=';', header=None, names=NAMESIN).transpose()
 
+""" Ice Rink to file """
 def drawRink():
     plt.clf()
     plt.xlim(0, ICE[0])
     plt.ylim(0, ICE[1])
-    plt.plot([ICE[1]//2-GOAL_WIDTH//2, ICE[1]//2+GOAL_WIDTH//2], [0, 0], 'go')
-    plt.plot([ICE[1]//2-GOAL_WIDTH//2, ICE[1]//2+GOAL_WIDTH//2], [ICE[0], ICE[0]], 'go')
+    goalratio = GOAL_WIDTH / (2*ICE[1])
+    plt.axvline(0.1, color='g', linewidth=2, ymin=0.5-goalratio, ymax=0.5+goalratio)
+    plt.axvline(ICE[0]-0.1, color='g', linewidth=2, ymin=0.5-goalratio, ymax=0.5+goalratio)
     plt.savefig('test.png')
 
-""" Velocity over time t """
-def velocity(v, t, m, f):
-    return v - t*f*G
+class Movement:
+    def __init__(self, start, m, r, f, v):
+        self.Mass = m
+        self.Radius = r
+        self.FrictionAcc = f*G
+        self.Velocity = v
+        self.Bounces = [start,]
 
-""" Time when circle stops """
-def stopTime(v, f):
-    return v / (f*G)
+    def velocity(self, t):
+        return (self.Velocity[0] - t*self.FrictionAcc, self.Velocity[1] - t*self.FrictionAcc)
 
-def trajectory():
-    pass
+    def position(self, t):
+        self.velocity(t)
+
+    def move(self):
+        print("nonsense")
+        pass
 
 def main(index):
     column = tuplify(DATA[index], NAMESIN, ["start", "velocity"])
-    print(column)
+    sim = Movement(column['start'], column['mass'], column['radius'], column['friction'], column['velocity'])
+    sim.move()
 
 if __name__=="__main__":
-    drawRink()
     for i in range(0,len(DATA.columns)):
         main(i)
