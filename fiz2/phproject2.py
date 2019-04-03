@@ -23,9 +23,30 @@ NAMESIN = ["start", "mass", "radius", "friction", "velocity"]
 NAMESOUT = ["stop", "time"]
 DATA = pandas.read_csv("input.txt", sep=';', header=None, names=NAMESIN).transpose()
 
+def drawRink():
+    plt.clf()
+    plt.xlim(0, ICE[0])
+    plt.ylim(0, ICE[1])
+    plt.plot([ICE[1]//2-GOAL_WIDTH//2, ICE[1]//2+GOAL_WIDTH//2], [0, 0], 'go')
+    plt.plot([ICE[1]//2-GOAL_WIDTH//2, ICE[1]//2+GOAL_WIDTH//2], [ICE[0], ICE[0]], 'go')
+    plt.savefig('test.png')
+
+""" Velocity over time t """
+def velocity(v, t, m, f):
+    return v - t*f*G
+
+""" Time when circle stops """
+def stopTime(v, f):
+    return v / (f*G)
+
+def trajectory():
+    pass
+
 def main(index):
     column = tuplify(DATA[index], NAMESIN, ["start", "velocity"])
     print(column)
 
 if __name__=="__main__":
-    main(0)
+    drawRink()
+    for i in range(0,len(DATA.columns)):
+        main(i)
