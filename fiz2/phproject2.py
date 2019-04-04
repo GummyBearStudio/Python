@@ -46,13 +46,13 @@ def bouncev(v, place):
         if dst[k] < dst[closest]:
             closest = k
     if closest == 'l':
-        v = (-v[0], v[1])
+        v = (abs(v[0]), v[1])
     elif closest == 'r':
-        v = (-v[0], v[1])
+        v = (-abs(v[0]), v[1])
     elif closest == 't':
-        v = (v[0], -v[1])
+        v = (v[0], -abs(v[1]))
     elif closest == 'b':
-        v = (v[0], -v[1])
+        v = (v[0], abs(v[1]))
     return v
 
 class LineMovement:
@@ -65,6 +65,24 @@ class LineMovement:
         self.Angle = math.atan(self.Velocity[0] / self.Velocity[1])
         self.FVector = (f*G*math.cos(self.Angle), f*G*math.sin(self.Angle))
 
+    def borders(self):
+        return {'l':self.Radius, 'r':ICE[0]-self.Radius, 'b':self.Radius, 't':ICE[1]-self.Radius}
+
+    def getHitTime(self):
+        borders = self.borders()
+        x = sympy.Symbol('x', real=True, positive=True)
+        hits = sympy.solve(self.getPosition(x)[1] - borders['t'], x)
+        hits += sympy.solve(self.getPosition(x)[1] - borders['b'], x)
+        hits += sympy.solve(self.getPosition(x)[0] - borders['l'], x)
+        hits += sympy.solve(self.getPosition(x)[0] - borders['r'], x)
+        ts = []
+        stop = self.getStopTime()
+        for i in hits:
+            if i <= stop:
+                ts.append(i)
+        print(ts)
+        return min(ts) if len(ts) > 0 else 0
+
     def getVelocity(self, t):
         return (self.Velocity[0] - t*self.FVector[0], self.Velocity[1] - t*self.FVector[1])
 
@@ -72,40 +90,7 @@ class LineMovement:
         return self.VNorm / (self.Friction*G)
 
     def getDistance(self, t):
-        lim = self.getStopTime()
-        distance = lambda time: self.VNorm * time - 0.5*(time**2.0)*self.Friction*G
-        return distance(t) if t < lim else distance(lim) # convert distance function to value at t
-
-    def getWallHit(self):
-        borders = {'l':self.Radius, 'r':ICE[0]-self.Radius, 'b':self.Radius, 't':ICE[1]-self.Radius}
-        wall = self.getWall(borders)
-        axle = 0 if wall in ['l', 'r'] else 1
-        x = sympy.Symbol('x', real=True)
-        hits = sympy.solve(self.Velocity[axle]*x - 0.5*(x**2.0)*self.FVector[axle] - abs(borders[wall] - self.Begin[axle]), x)
-        positive = []
-        for i in hits:
-            if i > 0:
-                positive.append(i)
-        return min(positive) if len(positive) > 0 else 0
-
-    def getWall(self, borders):
-        reacht = {'l':None, 'r':None, 't':None, 'b':None}
-        if self.Velocity[0] > 0:
-            reacht['r'] = (borders['r']-self.Begin[0]) / self.Velocity[0]
-        else:
-            reacht['l'] = (borders['l']-self.Begin[0]) / self.Velocity[0]
-        if self.Velocity[1] > 0:
-            reacht['t'] = (borders['t']-self.Begin[1]) / self.Velocity[1]
-        else:
-            reacht['b'] = (borders['b']-self.Begin[1]) / self.Velocity[1]
-        t = None
-        for k in reacht:
-            if reacht[k] != None:
-                if t == None:
-                    t = k
-                elif reacht[t] > reacht[k]:
-                    t = k
-        return t
+        return self.VNorm * t - 0.5*(t**2.0)*self.Friction*G
 
     def getPosition(self, t):
         distance = self.getDistance(t)
@@ -114,6 +99,7 @@ class LineMovement:
         return (self.Begin[0] + dx, self.Begin[1] + dy)
 
 def main(index):
+    print("-"*30, index+1, "-"*30)
     column = tuplify(DATA[index], NAMESIN, ["start", "velocity"])
     drawRink(column['start'])
     sim = LineMovement(column['start'], column['velocity'], column['radius'], column['friction'])
@@ -124,7 +110,7 @@ def main(index):
     inside = True
     # loop every bounce
     while elapsed < finish and inside:
-        traveltime = sim.getWallHit()
+        traveltime = sim.getHitTime()
         elapsed += traveltime
         bounces.append(sim.getPosition(traveltime))
         if traveltime == 0:
@@ -139,7 +125,7 @@ def main(index):
             updatedv = bouncev(sim.getVelocity(traveltime), bounces[-1])
         sim = LineMovement(bounces[-1], updatedv, column['radius'], column['friction'])
     df = pandas.DataFrame(bounces)
-    print("Slide duration: {}s".format(finish))
+    print("Slide duration: {} s".format(finish))
     print(df)
     plt.plot(df[0], df[1])
     plt.savefig("{}.png".format(index+1))
