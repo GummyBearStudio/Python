@@ -1,5 +1,6 @@
 import pandas
 import matplotlib.pyplot as plt
+import math
 
 # HELPERS
 
@@ -27,38 +28,51 @@ NAMESOUT = ["stop", "time"]
 DATA = pandas.read_csv("input.txt", sep=';', header=None, names=NAMESIN).transpose()
 
 """ Ice Rink to file """
-def drawRink():
+def drawRink(x, y, start=None):
     plt.clf()
     plt.xlim(0, ICE[0])
     plt.ylim(0, ICE[1])
     goalratio = GOAL_WIDTH / (2*ICE[1])
     plt.axvline(0.1, color='g', linewidth=2, ymin=0.5-goalratio, ymax=0.5+goalratio)
     plt.axvline(ICE[0]-0.1, color='g', linewidth=2, ymin=0.5-goalratio, ymax=0.5+goalratio)
-    plt.savefig('test.png')
+    plt.plot(x, y)
+    if start!=None:
+        plt.plot(*start, 'go')
 
-class Movement:
-    def __init__(self, start, m, r, f, v):
-        self.Mass = m
+class LineMovement:
+    def __init__(self, start, r, f, v):
         self.Radius = r
-        self.FrictionAcc = f*G
+        self.Friction = f
         self.Velocity = v
-        self.Bounces = [start,]
+        self.VNorm = (v[0]**2.0 + v[1]**2.0)**0.5
+        self.Begin = start
+        self.Angle = math.atan(self.Velocity[0] / self.Velocity[1])
+        self.FVector = (f*G*math.cos(self.Angle), f*G*math.sin(self.Angle))
 
-    def velocity(self, t):
-        return (self.Velocity[0] - t*self.FrictionAcc, self.Velocity[1] - t*self.FrictionAcc)
+    def getStopTime(self):
+        return self.VNorm / (self.Friction*G)
 
-    def position(self, t):
-        self.velocity(t)
+    def getDistance(self, t):
+        lim = self.getStopTime()
+        distance = lambda time: self.VNorm * time - 0.5*(time**2.0)*self.Friction*G
+        return distance(t) if t < lim else distance(lim) # convert distance function to value at t
 
-    def move(self):
-        print("nonsense")
+    def getWall(self):
         pass
+
+    def getPosition(self, t):
+        distance = self.getDistance(t)
+        dx = math.cos(self.Angle) * distance
+        dy = math.sin(self.Angle) * distance
+        return (self.Begin[0] + dx, self.Begin[1] + dy)
 
 def main(index):
     column = tuplify(DATA[index], NAMESIN, ["start", "velocity"])
-    sim = Movement(column['start'], column['mass'], column['radius'], column['friction'], column['velocity'])
-    sim.move()
+    sim = LineMovement(column['start'], column['radius'], column['friction'], column['velocity'])
+    axle = [x/100.0 for x in range(0,int(sim.getStopTime()*101))]
+    drawRink([sim.getPosition(x)[0] for x in axle], [sim.getPosition(x)[1] for x in axle], column['start'])
+    plt.savefig("{}.png".format(index+1))
 
 if __name__=="__main__":
-    for i in range(0,len(DATA.columns)):
+    for i in [0]:#range(0,len(DATA.columns)):
         main(i)
