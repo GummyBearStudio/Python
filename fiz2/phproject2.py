@@ -78,19 +78,34 @@ class LineMovement:
 
     def getWallHit(self):
         borders = {'l':self.Radius, 'r':ICE[0]-self.Radius, 'b':self.Radius, 't':ICE[1]-self.Radius}
-        time = sympy.Symbol('time', real=True)
-        hits = sympy.solve(self.Begin[0] - borders['l'] + self.Velocity[0]*time - 0.5*(time**2.0)*self.FVector[0], time)
-        hits += sympy.solve(self.Begin[0] - borders['r'] + self.Velocity[0]*time - 0.5*(time**2.0)*self.FVector[0], time)
-        hits += sympy.solve(self.Begin[1] - borders['t'] + self.Velocity[1]*time - 0.5*(time**2.0)*self.FVector[1], time)
-        hits += sympy.solve(self.Begin[1] - borders['b'] + self.Velocity[1]*time - 0.5*(time**2.0)*self.FVector[1], time)
-        time = []
-        for i in range(0,len(hits)):
-            if hits[i] > 0:
-                time.append(hits[i])
-        if len(time) > 0:
-            return min(time)
+        wall = self.getWall(borders)
+        axle = 0 if wall in ['l', 'r'] else 1
+        x = sympy.Symbol('x', real=True)
+        hits = sympy.solve(self.Velocity[axle]*x - 0.5*(x**2.0)*self.FVector[axle] - abs(borders[wall] - self.Begin[axle]), x)
+        positive = []
+        for i in hits:
+            if i > 0:
+                positive.append(i)
+        return min(positive) if len(positive) > 0 else 0
+
+    def getWall(self, borders):
+        reacht = {'l':None, 'r':None, 't':None, 'b':None}
+        if self.Velocity[0] > 0:
+            reacht['r'] = (borders['r']-self.Begin[0]) / self.Velocity[0]
         else:
-            return 0 # if cannot reach wall
+            reacht['l'] = (borders['l']-self.Begin[0]) / self.Velocity[0]
+        if self.Velocity[1] > 0:
+            reacht['t'] = (borders['t']-self.Begin[1]) / self.Velocity[1]
+        else:
+            reacht['b'] = (borders['b']-self.Begin[1]) / self.Velocity[1]
+        t = None
+        for k in reacht:
+            if reacht[k] != None:
+                if t == None:
+                    t = k
+                elif reacht[t] > reacht[k]:
+                    t = k
+        return t
 
     def getPosition(self, t):
         distance = self.getDistance(t)
