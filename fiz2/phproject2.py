@@ -26,7 +26,7 @@ GOAL_WIDTH = 1.0
 G = 10.0
 NAMESIN = ["start", "mass", "radius", "friction", "velocity"]
 NAMESOUT = ["stop", "time"]
-DATA = pandas.read_csv("input.txt", sep=';', header=None, names=NAMESIN).transpose()
+DATA = pandas.read_csv("fiz2\\input.txt", sep=';', header=None, names=NAMESIN).transpose()
 
 """ Ice Rink to file """
 def drawRink(start=None):
@@ -48,17 +48,21 @@ class LineMovement:
     def __init__(self, start, v, r, f):
         self.Radius = r
         self.Friction = f
+        self.Begin = start
+        self.setVelocity(v)
+
+    def setVelocity(self, v):
         self.Velocity = v
         self.VNorm = (v[0]**2.0 + v[1]**2.0)**0.5
-        self.Begin = start
-        self.Angle = math.atan(self.Velocity[0] / self.Velocity[1])
-        self.FVector = (f*G*math.cos(self.Angle), f*G*math.sin(self.Angle))
+        if self.Velocity[0] != 0.0:
+            self.Angle = math.atan(self.Velocity[1] / self.Velocity[0])
+        else:
+            self.Angle = math.pi / 2
+        self.FVector = (self.Friction*G*math.cos(self.Angle), self.Friction*G*math.sin(self.Angle))
 
-    def updateV(self, t, b):
-        lim = self.getStopTime()
-        if t > lim:
-            t = lim
-        self.Velocity = self.getVelocity(t)
+    def update(self, t, b):
+        self.Begin = self.getPosition(t)
+        self.setVelocity(self.getVelocity(t))
         if b == 'l':
             self.Velocity = (abs(self.Velocity[0]), self.Velocity[1])
         elif b == 'r':
@@ -72,24 +76,23 @@ class LineMovement:
         return {'l':self.Radius, 'r':ICE[0]-self.Radius, 'b':self.Radius, 't':ICE[1]-self.Radius}
 
     def getHitTime(self):
-        def test(h):
-            if len(h) > 0:
-                pos = self.getPosition(min(h))
-                return pos[0] >= 0 and pos[0] <= ICE[0] and pos[1] >= 0 and pos[1] <= ICE[1]
-            return False
+        def inrange(t):
+            pos = self.getPosition(t)
+            return pos[0] >= 0 and pos[1] >= 0 and pos[0] <= ICE[0] and pos[1] <= ICE[1]
         borders = self.borders()
         x = sympy.Symbol('x', real=True, positive=True)
-        for k in borders.keys():
-            axle = 1 if k in ['t', 'b'] else 0
-            tmphits = sympy.solve(self.getPosition(x + 0.01)[axle] - borders[k], x)
-            hits = []
-            for i in tmphits:
-                if i < self.getStopTime():
-                    hits.append(i)
-            if test(hits):
-                self.updateV(min(hits), k)
-                return min(hits)
-        return 0
+        result = self.getStopTime()
+        bouncewall = None
+        for wall in borders:
+            axle = 0 if wall in ['l', 'r'] else 1
+            solutions = sympy.solve(self.getPosition(x)[axle] - borders[wall], x)
+            if len(solutions) > 0:
+                m = min(solutions)
+                if m < result and inrange(float(m)):
+                    result = float(m)
+                    bouncewall = wall
+        self.update(result, bouncewall)
+        return result
 
     def getVelocity(self, t):
         return (self.Velocity[0] - t*self.FVector[0], self.Velocity[1] - t*self.FVector[1])
@@ -117,18 +120,16 @@ def main(index, fhandle):
     elapsed = 0.0
     inside = True
     # loop every bounce
+    print("Slide duration: {} s".format(finish))
     while elapsed < finish and inside:
         traveltime = sim.getHitTime()
         elapsed += traveltime
-        bounces.append(sim.getPosition(traveltime))
-        if elapsed >= finish or traveltime==0:
-            del bounces[-1]
-            bounces.append(sim.getPosition(sim.getStopTime()))
+        bounces.append(sim.Begin)
+        if traveltime==0:
             break
         else:
             inside = not checkGoal(bounces[-1])
     df = pandas.DataFrame(bounces)
-    print("Slide duration: {} s".format(finish))
     print(df)
     plt.plot(df[0], df[1])
     plt.savefig("{}.png".format(index+1))
