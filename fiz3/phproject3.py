@@ -21,7 +21,7 @@ def tuplify(c, nms, tup):
 
 # PHYSICS
 
-MARGIN = 0.005
+MARGIN = 0.001
 BALL_MASS = 0.017
 BALL_R = 0.03
 FRICTION = 0.015
@@ -30,21 +30,48 @@ TABLE = (2.7, 1.35)
 HOLE_R = 0.1 / 2.0
 G = 9.81
 NAMESIN = ["white", "velocity", "colored"]
-NAMESOUT = ["white", "colored", "bounces", "whitewallhits", "colorwallhits"]
+NAMESOUT = ["white", "colored", "ballhits", "whitewallhits", "colorwallhits"]
 DATA = pandas.read_csv("input.txt", sep=';', header=None, names=NAMESIN).transpose()
 
 """ Table to file """
 def draw(markers=None):
+    mscale = 200
     plt.clf()
     plt.xlim(0, TABLE[0])
     plt.ylim(0, TABLE[1])
-    if markers!=None:
-        plt.plot(*markers, 'go')
+    x = [0, TABLE[0]/2.0, TABLE[0]]
+    plt.plot(x, [0, 0, 0], 'ro', markersize=mscale*HOLE_R)
+    plt.plot(x, [TABLE[1], TABLE[1], TABLE[1]], 'ro', markersize=mscale*HOLE_R)
+    if markers!=None and len(markers)==2:
+        plt.plot(*markers[0], 'bo', markersize=mscale*BALL_R)
+        plt.plot(*markers[1], 'go', markersize=mscale*BALL_R)
 
-""" Check whether ball well into a hole """
+""" Check whether ball fell into a hole """
 def checkGoal(pos):
-    goalmargin = 0.1
-    pass
+    x = [0, TABLE[0]/2.0, TABLE[0]]
+    error = MARGIN + HOLE_R
+    if (pos[1] > -error and pos[1] < error) or (pos[1] > TABLE[1]-error and pos[1] < TABLE[1]+error):
+        for i in x:
+            return pos[0] > i - error and pos[0] < i + error
+    return False
+
+""" Distance between points a and b """
+def normDistance(a, b):
+    return ((b[0] - a[0])**2.0 + (b[1] - a[1])**2.0)**0.5
+
+""" Retrieves correct arctan angle """
+def getVectorAngle(vec):
+    Angle = 0.0
+    if vec[0] != 0.0:
+        Angle = math.atan(vec[1] / vec[0])
+        # atan needs vector direction fix when Vx < 0
+        if vec[0] < 0:
+            Angle = math.pi + Angle
+    else:
+        Angle = math.pi / 2
+        if vec[1] < 0:
+            Angle = -Angle
+    return Angle
 
 class LineMovement:
     def __init__(self, start, v):
@@ -55,30 +82,23 @@ class LineMovement:
     def setVelocity(self, v):
         self.Velocity = v
         self.VNorm = (v[0]**2.0 + v[1]**2.0)**0.5
-        if self.Velocity[0] != 0.0:
-            self.Angle = math.atan(self.Velocity[1] / self.Velocity[0])
-            # atan needs vector direction fix when Vx < 0
-            if self.Velocity[0] < 0:
-                self.Angle = math.pi + self.Angle
-        else:
-            self.Angle = math.pi / 2
-            if self.Velocity[1] < 0:
-                self.Angle = -self.Angle
+        self.Angle = getVectorAngle(self.Velocity)
         self.FVector = (-FRICTION*G*math.cos(self.Angle), -FRICTION*G*math.sin(self.Angle))
 
     def update(self, t, b):
         self.Begin = self.getPosition(t)
         new_v = self.getVelocity(t)
-        energy_loss = ENERGY_RATIO ** 0.5
-        new_v = (new_v[0]*energy_loss, new_v[1]*energy_loss)
-        if b == 'l':
-            new_v = (abs(new_v[0]), new_v[1])
-        elif b == 'r':
-            new_v = (-abs(new_v[0]), new_v[1])
-        elif b == 't':
-            new_v = (new_v[0], -abs(new_v[1]))
-        elif b == 'b':
-            new_v = (new_v[0], abs(new_v[1]))
+        if b != None:
+            energy_loss = ENERGY_RATIO ** 0.5
+            new_v = (new_v[0]*energy_loss, new_v[1]*energy_loss)
+            if b == 'l':
+                new_v = (abs(new_v[0]), new_v[1])
+            elif b == 'r':
+                new_v = (-abs(new_v[0]), new_v[1])
+            elif b == 't':
+                new_v = (new_v[0], -abs(new_v[1]))
+            elif b == 'b':
+                new_v = (new_v[0], abs(new_v[1]))
         self.setVelocity(new_v)
 
     def getHitTime(self):
@@ -99,6 +119,8 @@ class LineMovement:
         return result
 
     def getVelocity(self, t):
+        if self.VNorm == 0:
+            t = 0
         return (self.Velocity[0] + t*self.FVector[0], self.Velocity[1] + t*self.FVector[1])
 
     def getStopTime(self):
@@ -113,35 +135,83 @@ class LineMovement:
         dy = math.sin(self.Angle) * distance
         return (self.Begin[0] + dx, self.Begin[1] + dy)
 
+class Ball:
+    def __init__(self, pos, v=(0, 0)):
+        self.Movement = LineMovement(pos, v)
+        self.bounces = [pos]
+        self.times = [0.0]
+        self.elapsed = 0.0
+        self.inside = True
+
+    def addBounce(self, p, t):
+        self.bounces.append(p)
+        self.times.append(t)
+        self.elapsed += t
+
+    def getBallHit(self, other, left=0.01, right=None):
+        if right == None:
+            right = self.Movement.getStopTime()
+        time = (right+left) / 2.0
+        dst = normDistance(self.Movement.getPosition(time), other.Movement.getPosition(time))
+        if dst - 2*BALL_R <= MARGIN:
+            return time
+        if right-left < MARGIN:
+            return None
+        h = 0.001
+        dstprim = normDistance(self.Movement.getPosition(time+h), other.Movement.getPosition(time+h)) - dst
+        if dstprim < 0:
+            return self.getBallHit(other, time, right)
+        else:
+            return self.getBallHit(other, left, time)
+
+    def transferEnergy(self, other, bht):
+        if bht != None:
+            self.Movement.update(bht, None)
+            other.Movement.update(bht, None)
+            self.addBounce(self.Movement.Begin, bht)
+            other.addBounce(other.Movement.Begin, bht)
+            sumvec = (self.Movement.Velocity[0] + other.Movement.Velocity[0], self.Movement.Velocity[1] + other.Movement.Velocity[1])
+            angle = getVectorAngle(sumvec)
+            norm = self.Movement.VNorm**2.0 + other.Movement.VNorm**2.0
+            x = sympy.Symbol('x', real=True)
+            solutions = sympy.solve(norm - x**2.0 - (sumvec[0] / math.cos(angle) + x)**2.0, x)
+            # TODO: update velocities
+            return solutions
+
+    def loop(self, cousins=[]):
+        # TODO: run collision test on cousins
+        wallbounce = self.Movement.getHitTime()
+        self.addBounce(self.Movement.Begin, wallbounce)
+        self.inside = not checkGoal(self.bounces[-1])
+        # TODO: return counters
+
+    def dataSheet(self):
+        return pandas.DataFrame(data={'x':[round(b[0], 2) for b in self.bounces], 'y':[round(b[1], 2) for b in self.bounces], 'delta t':[round(t, 3) for t in self.times]})
+
 def main(index, fhandle):
     print("-"*30, index+1, "-"*30)
     column = tuplify(DATA[index], NAMESIN, NAMESIN)
-    draw(column['start'])
-    sim = LineMovement(column['start'], column['velocity'])
-    # params
-    finish = sim.getStopTime()
-    bounces = [column['start']]
-    times = [0.0]
-    elapsed = 0.0
-    inside = True
+    draw([column['white'], column['colored']])
+    balls = [Ball(column['white'], column['velocity']), Ball(column['colored'])]
+    counter = [0, 0, 0]
     # loop every bounce
-    print("Slide duration: {} s".format(finish))
-    while elapsed < finish and inside:
-        times.append(sim.getHitTime())
-        elapsed += times[-1]
-        bounces.append(sim.Begin)
-        if times[-1]==0:
+    print(balls[0].transferEnergy(balls[1], balls[0].getBallHit(balls[1])))
+    while balls[0].inside and balls[1].inside:
+        balls[0].loop([balls[1],])
+        balls[1].loop([balls[0],])
+        if balls[0].times[-1]>-10e-9 and balls[0].times[-1]<10e-9 and balls[1].times[-1]>-10e-9 and balls[1].times[-1]<10e-9:
             break
-        else:
-            inside = not checkGoal(bounces[-1])
-    df = pandas.DataFrame(data={'x':[round(b[0], 2) for b in bounces], 'y':[round(b[1], 2) for b in bounces], 'delta t':[round(t, 3) for t in times]})
-    print(df)
-    plt.plot(df['x'], df['y'])
+    white = balls[0].dataSheet()
+    color = balls[1].dataSheet()
+    print(white)
+    print(color)
+    # write files
+    plt.plot(white['x'], white['y'])
+    plt.plot(color['x'], color['y'])
     plt.savefig("{}.png".format(index+1))
-    if inside:
-        fhandle.write('({0:.2f}, {1:.2f}); {2:.2f}; {3}\n'.format(*bounces[-1], finish, '; '.join(["({0:.2f}, {0:.2f})".format(*bounces[x]) for x in range(1, len(bounces)-1)])))
-    else:
-        fhandle.write('(out); {0:.2f}; {1}\n'.format(finish, '; '.join(["({0:.2f}, {0:.2f})".format(*bounces[x]) for x in range(1, len(bounces)-1)])))
+    end = '(faul)'
+    cend = '(score)'
+    fhandle.write(';\n')
 
 if __name__=="__main__":
     with open('output.txt', 'w') as f:
