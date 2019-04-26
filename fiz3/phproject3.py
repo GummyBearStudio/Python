@@ -1,4 +1,5 @@
 import pandas
+import numpy
 import matplotlib.pyplot as plt
 import math
 import sympy
@@ -52,7 +53,8 @@ def checkGoal(pos):
     error = MARGIN + HOLE_R
     if (pos[1] > -error and pos[1] < error) or (pos[1] > TABLE[1]-error and pos[1] < TABLE[1]+error):
         for i in x:
-            return pos[0] > i - error and pos[0] < i + error
+            if pos[0] > i - error and pos[0] < i + error:
+                return True
     return False
 
 """ Distance between points a and b """
@@ -136,8 +138,9 @@ class LineMovement:
         return (self.Begin[0] + dx, self.Begin[1] + dy)
 
 class Ball:
-    def __init__(self, pos, v=(0, 0)):
+    def __init__(self, pos, v=(0, 0), mass=BALL_MASS):
         self.Movement = LineMovement(pos, v)
+        self.Mass = mass
         self.bounces = [pos]
         self.times = [0.0]
         self.elapsed = 0.0
@@ -170,20 +173,26 @@ class Ball:
             other.Movement.update(bht, None)
             self.addBounce(self.Movement.Begin, bht)
             other.addBounce(other.Movement.Begin, bht)
-            sumvec = (self.Movement.Velocity[0] + other.Movement.Velocity[0], self.Movement.Velocity[1] + other.Movement.Velocity[1])
-            angle = getVectorAngle(sumvec)
-            norm = self.Movement.VNorm**2.0 + other.Movement.VNorm**2.0
-            x = sympy.Symbol('x', real=True)
-            solutions = sympy.solve(norm - x**2.0 - (sumvec[0] / math.cos(angle) + x)**2.0, x)
+            momentum = numpy.array(self.Movement.Velocity) * self.Mass + numpy.array(other.Movement.Velocity) * other.Mass
+            energy = self.Movement.VNorm**2 * self.Mass + other.Movement.VNorm**2 * other.Mass
+            d = (math.tan(self.Movement.Angle) * other.Movement.Begin[0] - other.Movement.Begin[0] + self.Movement.Begin[1] - self.Movement.Begin[0] * math.tan(self.Movement.Angle)) / (math.tan(self.Movement.Angle)**2 + 1)**0.5
+            beta = math.asin(0.5 * d / BALL_R)
+            alpha = math.pi / 2 - beta
+            unit_vector_A = numpy.array([1, math.tan(self.Movement.Angle - alpha)])
+            unit_vector_A = unit_vector_A / (1 + unit_vector_A[1]**2)**0.5
+            unit_vector_B = numpy.array([1, math.tan(self.Movement.Angle + beta)])
+            unit_vector_B = unit_vector_B / (1 + unit_vector_B[1]**2)**0.5
             # TODO: update velocities
-            return solutions
+            self.Movement.setVelocity(list(unit_vector_A * 5))
+            other.Movement.setVelocity(list(unit_vector_B * 5))
 
-    def loop(self, cousins=[]):
+    def loop(self, counter, cousins=[]):
+        counter += 1
         # TODO: run collision test on cousins
-        wallbounce = self.Movement.getHitTime()
-        self.addBounce(self.Movement.Begin, wallbounce)
-        self.inside = not checkGoal(self.bounces[-1])
-        # TODO: return counters
+        wallbouncet = self.Movement.getHitTime()
+        self.addBounce(self.Movement.Begin, wallbouncet)
+        self.inside = not checkGoal(self.Movement.Begin)
+        return counter
 
     def dataSheet(self):
         return pandas.DataFrame(data={'x':[round(b[0], 2) for b in self.bounces], 'y':[round(b[1], 2) for b in self.bounces], 'delta t':[round(t, 3) for t in self.times]})
@@ -193,12 +202,11 @@ def main(index, fhandle):
     column = tuplify(DATA[index], NAMESIN, NAMESIN)
     draw([column['white'], column['colored']])
     balls = [Ball(column['white'], column['velocity']), Ball(column['colored'])]
-    counter = [0, 0, 0]
+    counter = 0
     # loop every bounce
-    print(balls[0].transferEnergy(balls[1], balls[0].getBallHit(balls[1])))
     while balls[0].inside and balls[1].inside:
-        balls[0].loop([balls[1],])
-        balls[1].loop([balls[0],])
+        counter = balls[0].loop(counter, [balls[1],])
+        counter = balls[1].loop(counter, [balls[0],])
         if balls[0].times[-1]>-10e-9 and balls[0].times[-1]<10e-9 and balls[1].times[-1]>-10e-9 and balls[1].times[-1]<10e-9:
             break
     white = balls[0].dataSheet()
@@ -209,6 +217,7 @@ def main(index, fhandle):
     plt.plot(white['x'], white['y'])
     plt.plot(color['x'], color['y'])
     plt.savefig("{}.png".format(index+1))
+    # TODO: write output.txt
     end = '(faul)'
     cend = '(score)'
     fhandle.write(';\n')
