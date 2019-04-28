@@ -168,29 +168,33 @@ class Ball:
             return self.getBallHit(other, left, time)
 
     def transferEnergy(self, other, bht):
-        if bht != None:
-            self.Movement.update(bht, None)
-            other.Movement.update(bht, None)
-            self.addBounce(self.Movement.Begin, bht)
-            other.addBounce(other.Movement.Begin, bht)
-            momentum = numpy.array(self.Movement.Velocity) * self.Mass + numpy.array(other.Movement.Velocity) * other.Mass
-            energy = self.Movement.VNorm**2 * self.Mass + other.Movement.VNorm**2 * other.Mass
-            d = (math.tan(self.Movement.Angle) * other.Movement.Begin[0] - other.Movement.Begin[0] + self.Movement.Begin[1] - self.Movement.Begin[0] * math.tan(self.Movement.Angle)) / (math.tan(self.Movement.Angle)**2 + 1)**0.5
-            beta = math.asin(0.5 * d / BALL_R)
-            alpha = math.pi / 2 - beta
-            unit_vector_A = numpy.array([1, math.tan(self.Movement.Angle - alpha)])
-            unit_vector_A = unit_vector_A / (1 + unit_vector_A[1]**2)**0.5
-            unit_vector_B = numpy.array([1, math.tan(self.Movement.Angle + beta)])
-            unit_vector_B = unit_vector_B / (1 + unit_vector_B[1]**2)**0.5
-            # TODO: update velocities
-            self.Movement.setVelocity(list(unit_vector_A * 5))
-            other.Movement.setVelocity(list(unit_vector_B * 5))
+        if bht == None:
+            return
+        self.Movement.update(bht, None)
+        other.Movement.update(bht, None)
+        self.addBounce(self.Movement.Begin, bht)
+        other.addBounce(other.Movement.Begin, bht)
+        momentum = numpy.array(self.Movement.Velocity) * self.Mass + numpy.array(other.Movement.Velocity) * other.Mass
+        energy = self.Movement.VNorm**2 * self.Mass + other.Movement.VNorm**2 * other.Mass
+        d = (math.tan(self.Movement.Angle) * other.Movement.Begin[0] - other.Movement.Begin[0] + self.Movement.Begin[1] - self.Movement.Begin[0] * math.tan(self.Movement.Angle)) / (math.tan(self.Movement.Angle)**2 + 1)**0.5
+        beta = math.asin(0.5 * d / BALL_R)
+        alpha = math.pi / 2 - beta
+        unit_vector_A = numpy.array([1, math.tan(self.Movement.Angle - alpha)])
+        unit_vector_A = unit_vector_A / (1 + unit_vector_A[1]**2)**0.5
+        unit_vector_B = numpy.array([1, math.tan(self.Movement.Angle + beta)])
+        unit_vector_B = unit_vector_B / (1 + unit_vector_B[1]**2)**0.5
+        # TODO: update velocities
+        self.Movement.setVelocity(list(unit_vector_A * 5))
+        other.Movement.setVelocity(list(unit_vector_B * 5))
 
     def loop(self, counter, cousins=[]):
-        counter += 1
-        # TODO: run collision test on cousins
-        wallbouncet = self.Movement.getHitTime()
-        self.addBounce(self.Movement.Begin, wallbouncet)
+        for c in cousins:
+            ballt = self.getBallHit(c)
+            if ballt!=None:
+                counter += 1
+                self.transferEnergy(c, ballt)
+        wallt = self.Movement.getHitTime()
+        self.addBounce(self.Movement.Begin, wallt)
         self.inside = not checkGoal(self.Movement.Begin)
         return counter
 
