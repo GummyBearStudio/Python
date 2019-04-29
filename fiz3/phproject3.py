@@ -75,6 +75,11 @@ def getVectorAngle(vec):
             Angle = -Angle
     return Angle
 
+def getPointDistance(angle, cross, point):
+    a = math.tan(angle)
+    b = cross[1] - a*cross[0]
+    return (a*point[0] + b - point[1]) / ((1 + a**2.0)**0.5)
+
 class LineMovement:
     def __init__(self, start, v):
         self.borders = {'l':BALL_R, 'r':TABLE[0]-BALL_R, 'b':BALL_R, 't':TABLE[1]-BALL_R}
@@ -167,6 +172,13 @@ class Ball:
         else:
             return self.getBallHit(other, left, time)
 
+    def _getImpulse(self, other):
+        normal = numpy.array(self.Movement.Begin) - numpy.array(other.Movement.Begin)
+        normal = normal / ((normal @ normal)**0.5)
+        dmom = numpy.array(self.Movement.Velocity) * self.Mass - numpy.array(other.Movement.Velocity) * other.Mass
+        strength = dmom @ normal
+        return normal * strength
+
     def transferEnergy(self, other, bht):
         if bht == None:
             return
@@ -174,18 +186,10 @@ class Ball:
         other.Movement.update(bht, None)
         self.addBounce(self.Movement.Begin, bht)
         other.addBounce(other.Movement.Begin, bht)
-        momentum = numpy.array(self.Movement.Velocity) * self.Mass + numpy.array(other.Movement.Velocity) * other.Mass
+        impulse = self._getImpulse(other)
         energy = self.Movement.VNorm**2 * self.Mass + other.Movement.VNorm**2 * other.Mass
-        d = (math.tan(self.Movement.Angle) * other.Movement.Begin[0] - other.Movement.Begin[0] + self.Movement.Begin[1] - self.Movement.Begin[0] * math.tan(self.Movement.Angle)) / (math.tan(self.Movement.Angle)**2 + 1)**0.5
-        beta = math.asin(0.5 * d / BALL_R)
-        alpha = math.pi / 2 - beta
-        unit_vector_A = numpy.array([1, math.tan(self.Movement.Angle - alpha)])
-        unit_vector_A = unit_vector_A / (1 + unit_vector_A[1]**2)**0.5
-        unit_vector_B = numpy.array([1, math.tan(self.Movement.Angle + beta)])
-        unit_vector_B = unit_vector_B / (1 + unit_vector_B[1]**2)**0.5
-        # TODO: update velocities
-        self.Movement.setVelocity(list(unit_vector_A * 5))
-        other.Movement.setVelocity(list(unit_vector_B * 5))
+        self.Movement.setVelocity(tuple(numpy.array(self.Movement.Velocity) - impulse / self.Mass))
+        other.Movement.setVelocity(tuple(numpy.array(other.Movement.Velocity) + impulse / other.Mass))
 
     def loop(self, counter, cousins=[]):
         for c in cousins:
@@ -217,6 +221,7 @@ def main(index, fhandle):
     color = balls[1].dataSheet()
     print(white)
     print(color)
+    print('Ball hits: ', counter)
     # write files
     plt.plot(white['x'], white['y'])
     plt.plot(color['x'], color['y'])
