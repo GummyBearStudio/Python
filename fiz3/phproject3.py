@@ -34,7 +34,7 @@ NAMESIN = ["white", "velocity", "colored"]
 NAMESOUT = ["white", "colored", "ballhits", "whitewallhits", "colorwallhits"]
 DATA = pandas.read_csv("input.txt", sep=';', header=None, names=NAMESIN).transpose()
 
-""" Table to file """
+""" Table to plot """
 def draw(markers=None):
     mscale = 200
     plt.clf()
@@ -75,6 +75,7 @@ def getVectorAngle(vec):
             Angle = -Angle
     return Angle
 
+""" Calcs point distance from linear function defined by its angle and crossing point """
 def getPointDistance(angle, cross, point):
     a = math.tan(angle)
     b = cross[1] - a*cross[0]
@@ -161,7 +162,7 @@ class Ball:
             right = self.Movement.getStopTime()
         time = (right+left) / 2.0
         dst = normDistance(self.Movement.getPosition(time), other.Movement.getPosition(time))
-        if dst - 2*BALL_R <= MARGIN:
+        if dst <= MARGIN + 2*BALL_R:
             return time
         if right-left < MARGIN:
             return None
@@ -190,15 +191,19 @@ class Ball:
         energy = self.Movement.VNorm**2 * self.Mass + other.Movement.VNorm**2 * other.Mass
         self.Movement.setVelocity(tuple(numpy.array(self.Movement.Velocity) - impulse / self.Mass))
         other.Movement.setVelocity(tuple(numpy.array(other.Movement.Velocity) + impulse / other.Mass))
+        print("Kinetic energy debug:",energy,'=',self.Movement.VNorm**2 * self.Mass + other.Movement.VNorm**2 * other.Mass)
 
-    def loop(self, counter, cousins=[]):
+    def loop(self, cousins=[]):
+        counter = {'ball':0, 'wall':0}
         for c in cousins:
             ballt = self.getBallHit(c)
             if ballt!=None:
-                counter += 1
+                counter['ball'] += 1
                 self.transferEnergy(c, ballt)
         wallt = self.Movement.getHitTime()
         self.addBounce(self.Movement.Begin, wallt)
+        if wallt > MARGIN:
+            counter['wall'] += 1
         self.inside = not checkGoal(self.Movement.Begin)
         return counter
 
@@ -210,11 +215,15 @@ def main(index, fhandle):
     column = tuplify(DATA[index], NAMESIN, NAMESIN)
     draw([column['white'], column['colored']])
     balls = [Ball(column['white'], column['velocity']), Ball(column['colored'])]
-    counter = 0
+    counter = {'white':0, 'color':0, 'ball':0}
     # loop every bounce
     while balls[0].inside and balls[1].inside:
-        counter = balls[0].loop(counter, [balls[1],])
-        counter = balls[1].loop(counter, [balls[0],])
+        tmp = balls[0].loop([balls[1],])
+        counter['white'] += tmp['wall']
+        counter['ball'] += tmp['ball']
+        tmp = balls[1].loop([balls[0],])
+        counter['color'] += tmp['wall']
+        counter['ball'] += tmp['ball']
         if balls[0].times[-1]>-10e-9 and balls[0].times[-1]<10e-9 and balls[1].times[-1]>-10e-9 and balls[1].times[-1]<10e-9:
             break
     white = balls[0].dataSheet()
@@ -226,12 +235,15 @@ def main(index, fhandle):
     plt.plot(white['x'], white['y'])
     plt.plot(color['x'], color['y'])
     plt.savefig("{}.png".format(index+1))
-    # TODO: write output.txt
-    end = '(faul)'
-    cend = '(score)'
-    fhandle.write(';\n')
+    summary = [(0,0), (0,0), 0, 0, 0]
+    summary[0] = (round(balls[0].Movement.Begin[0], 2), round(balls[0].Movement.Begin[1], 2)) if balls[0].inside else '(faul)'
+    summary[1] = (round(balls[1].Movement.Begin[0], 2), round(balls[1].Movement.Begin[1], 2)) if balls[1].inside else '(score)'
+    summary[2] = counter['ball']
+    summary[3] = counter['white'] - 1
+    summary[4] = counter['color'] - 1
+    fhandle.write('{0};{1};{2};{3};{4}\n'.format(*summary))
 
 if __name__=="__main__":
     with open('output.txt', 'w') as f:
-        for i in range(0,len(DATA.columns)):
+        for i in [2]:#range(0,len(DATA.columns)):
             main(i, f)
