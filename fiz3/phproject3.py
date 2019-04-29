@@ -135,6 +135,8 @@ class LineMovement:
         return self.VNorm / (FRICTION*G)
 
     def getDistance(self, t):
+        if self.VNorm == 0:
+            return 0
         return self.VNorm * t - 0.5*(t**2.0)*FRICTION*G
 
     def getPosition(self, t):
@@ -162,8 +164,15 @@ class Ball:
             right = self.Movement.getStopTime()
         time = (right+left) / 2.0
         dst = normDistance(self.Movement.getPosition(time), other.Movement.getPosition(time))
-        if dst <= MARGIN + 2*BALL_R:
-            return time
+        if dst <= 2*BALL_R + MARGIN :
+            if dst >= 2*BALL_R - MARGIN:
+                return time
+            else:
+                h = -0.001
+                dstprim = (normDistance(self.Movement.getPosition(time+h), other.Movement.getPosition(time+h)) - dst) / h
+                time -= (2*BALL_R - dst) / dstprim
+                # debug = normDistance(self.Movement.getPosition(time), other.Movement.getPosition(time))
+                return time
         if right-left < MARGIN:
             return None
         h = 0.001
@@ -175,7 +184,8 @@ class Ball:
 
     def _getImpulse(self, other):
         normal = numpy.array(self.Movement.Begin) - numpy.array(other.Movement.Begin)
-        normal = normal / ((normal @ normal)**0.5)
+        dst = (normal @ normal)**0.5
+        normal = normal / dst
         dmom = numpy.array(self.Movement.Velocity) * self.Mass - numpy.array(other.Movement.Velocity) * other.Mass
         strength = dmom @ normal
         return normal * strength
@@ -215,7 +225,7 @@ def main(index, fhandle):
     column = tuplify(DATA[index], NAMESIN, NAMESIN)
     draw([column['white'], column['colored']])
     balls = [Ball(column['white'], column['velocity']), Ball(column['colored'])]
-    counter = {'white':0, 'color':0, 'ball':0}
+    counter = {'white':-1, 'color':-1, 'ball':0}
     # loop every bounce
     while balls[0].inside and balls[1].inside:
         tmp = balls[0].loop([balls[1],])
@@ -239,11 +249,11 @@ def main(index, fhandle):
     summary[0] = (round(balls[0].Movement.Begin[0], 2), round(balls[0].Movement.Begin[1], 2)) if balls[0].inside else '(faul)'
     summary[1] = (round(balls[1].Movement.Begin[0], 2), round(balls[1].Movement.Begin[1], 2)) if balls[1].inside else '(score)'
     summary[2] = counter['ball']
-    summary[3] = counter['white'] - 1
-    summary[4] = counter['color'] - 1
+    summary[3] = counter['white']
+    summary[4] = counter['color']
     fhandle.write('{0};{1};{2};{3};{4}\n'.format(*summary))
 
 if __name__=="__main__":
     with open('output.txt', 'w') as f:
-        for i in [2]:#range(0,len(DATA.columns)):
+        for i in range(0,len(DATA.columns)):
             main(i, f)
