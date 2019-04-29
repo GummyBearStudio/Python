@@ -224,7 +224,7 @@ def main(index, fhandle):
     print("-"*30, index+1, "-"*30)
     column = tuplify(DATA[index], NAMESIN, NAMESIN)
     draw([column['white'], column['colored']])
-    balls = [Ball(column['white'], column['velocity']), Ball(column['colored'])]
+    balls = [Ball(column['white'], column['velocity']), Ball(column['colored'], mass=2*BALL_MASS)]
     counter = {'white':-1, 'color':-1, 'ball':0}
     # loop every bounce
     while balls[0].inside and balls[1].inside:
