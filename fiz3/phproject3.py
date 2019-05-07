@@ -168,14 +168,13 @@ class Ball:
             if dst >= 2*BALL_R - MARGIN:
                 return time
             else:
-                h = -0.001
+                h = -0.00001
                 dstprim = (normDistance(self.Movement.getPosition(time+h), other.Movement.getPosition(time+h)) - dst) / h
                 time -= (2*BALL_R - dst) / dstprim
-                # debug = normDistance(self.Movement.getPosition(time), other.Movement.getPosition(time))
                 return time
         if right-left < MARGIN:
             return None
-        h = 0.001
+        h = 0.00001
         dstprim = normDistance(self.Movement.getPosition(time+h), other.Movement.getPosition(time+h)) - dst
         if dstprim < 0:
             return self.getBallHit(other, time, right)
@@ -186,8 +185,8 @@ class Ball:
         normal = numpy.array(self.Movement.Begin) - numpy.array(other.Movement.Begin)
         dst = (normal @ normal)**0.5
         normal = normal / dst
-        dmom = numpy.array(self.Movement.Velocity) * self.Mass - numpy.array(other.Movement.Velocity) * other.Mass
-        strength = dmom @ normal
+        dv = numpy.array(self.Movement.Velocity) - numpy.array(other.Movement.Velocity)
+        strength = (dv @ normal) * 2 * self.Mass * other.Mass / (self.Mass + other.Mass)
         return normal * strength
 
     def transferEnergy(self, other, bht):
@@ -224,7 +223,7 @@ def main(index, fhandle):
     print("-"*30, index+1, "-"*30)
     column = tuplify(DATA[index], NAMESIN, NAMESIN)
     draw([column['white'], column['colored']])
-    balls = [Ball(column['white'], column['velocity']), Ball(column['colored'], mass=2*BALL_MASS)]
+    balls = [Ball(column['white'], column['velocity']), Ball(column['colored'])]
     counter = {'white':-1, 'color':-1, 'ball':0}
     # loop every bounce
     while balls[0].inside and balls[1].inside:
