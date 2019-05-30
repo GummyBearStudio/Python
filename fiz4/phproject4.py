@@ -24,6 +24,7 @@ def tuplify(c, nms, tup):
 MARGIN = 1.0
 STEP = 0.05
 G = 6.7 * 1e-11
+
 NAMESIN = []
 NAMESOUT = []
 for i in [1,2,3]:
@@ -74,37 +75,34 @@ class Body:
     def __init__(self, start, mass, v):
         self.Movement = LineMovement(start, v)
         self.Mass = mass
+        self.History = [start]
 
-    def _getImpulse(self, other):
-        normal = numpy.array(self.Movement.Position) - numpy.array(other.Movement.Position)
-        dst = (normal @ normal)**0.5
-        normal = normal / dst
-        dv = numpy.array(self.Movement.Velocity) - numpy.array(other.Movement.Velocity)
-        strength = (dv @ normal) * 2 * self.Mass * other.Mass / (self.Mass + other.Mass)
-        return normal * strength
+    def oneStep(self, force):
+        self.Movement.Position = self.Movement.getPosition(STEP)
+        (force / self.Mass) * STEP
 
-    def transferEnergy(self, other, bht):
-        if bht == None:
-            return
-        impulse = self._getImpulse(other)
-        energy = self.Movement.VNorm**2 * self.Mass + other.Movement.VNorm**2 * other.Mass
-        self.Movement.setVelocity(tuple(numpy.array(self.Movement.Velocity) - impulse / self.Mass))
-        other.Movement.setVelocity(tuple(numpy.array(other.Movement.Velocity) + impulse / other.Mass))
-        print("Kinetic energy debug:",energy,'=',self.Movement.VNorm**2 * self.Mass + other.Movement.VNorm**2 * other.Mass)
+    def gravity(self, other):
+        angle = getVectorAngle(numpy.array(other.Movement.Position) - numpy.array(self.Movement.Position))
+        strength = G * self.Mass * other.Mass / (normDistance(self.Movement.Position, other.Movement.Position)**2.0)
+        return (strength * math.cos(angle), strength * math.sin(angle))
+
+    def combineBody(self, other):
+        mass = self.Mass + other.Mass
+        avgpos = numpy.array(self.Movement.Position) * self.Mass + numpy.array(other.Movement.Position) * other.Mass
+        avgv = numpy.array(self.Movement.Velocity) * self.Mass + numpy.array(other.Movement.Velocity) * other.Mass
+        return Body(tuple(avgpos / mass), mass, tuple(avgv / mass))
 
 def main(index, fhandle):
     print("-"*30, index+1, "-"*30)
     column = tuplify(DATA[index], NAMESIN, NAMESOUT)
-    print(column)
-    return
-    bodies = [Body(column['start1'], column['mass1'], column['velocity1'])]
+    bodies = [ Body(column[f'pos{i}'], column[f'mass{i}'], column[f'velocity{i}']) for i in [1,2,3] ]
     # loop until all bodies merged
     while len(bodies) > 1:
         bodies = []
     # write files
     plt.clf()
     plt.savefig("{}.png".format(index+1))
-    summary = [(0,0), (0,0), 0, 0, 0]
+    summary = [(0,0), [0,0], (0,0), (0,0)]
     fhandle.write('{0};{1};{2};{3};{4}\n'.format(*summary))
 
 if __name__=="__main__":
