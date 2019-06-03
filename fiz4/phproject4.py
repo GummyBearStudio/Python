@@ -110,15 +110,17 @@ def main(index, fhandle):
     column = tuplify(DATA[index], NAMESIN, NAMESOUT)
     bodies = [ Body(column[f'pos{i}'], column[f'mass{i}'], column[f'velocity{i}']) for i in range(1, N+1) ]
     print([str(b) for b in bodies])
-    print("Sim duration: {0}".format(column['t']))
     stories = []
     collisions = []
+    statont = None
     elapsed = 0.0
     # loop until all bodies merged
-    while len(bodies) > 1 and elapsed < column['t']:
-        elapsed += STEP
+    while len(bodies) > 1:
         for x in range(0, len(bodies)):
             bodies[x].updateStep(bodies[x].sumGravity(bodies[:x] + bodies[x+1:]))
+        elapsed += STEP
+        if statont == None and elapsed > column['t']:
+            statont = [ ((round(b.Movement.Position[0], 2), round(b.Movement.Position[1], 2)), [round(b.Movement.Velocity[0], 2), round(b.Movement.Velocity[1], 2)]) for b in bodies ]
         for x in bodies:
             for y in bodies:
                 if x != y and normDistance(y.Movement.Position, x.Movement.Position) < MARGIN:
@@ -137,9 +139,13 @@ def main(index, fhandle):
         plt.plot([s[0] for s in stry[0]], [s[1] for s in stry[0]], label=stry[1])
     plt.legend()
     plt.savefig("{}.png".format(index+1))
-    summary = [(0,0), [0,0]]*N + [(0,0),]*(N-1)
+    summary = [('?','?'), ['?','?']]*N + [('?','?'),]*(N-1)
     for i in range(0, len(collisions)):
         summary[len(summary)-N+1+i] = (round(collisions[i][0], 2), round(collisions[i][1], 2))
+    if statont != None:
+        for i in range(0, len(statont)):
+            summary[2*i] = statont[i][0]
+            summary[2*i+1] = statont[i][1]
     print(summary)
     fhandle.write(str(summary[0]))
     for i in range(1, len(summary)):
