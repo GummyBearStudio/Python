@@ -22,9 +22,9 @@ def tuplify(c, nms, tup):
 # PHYSICS
 
 MARGIN = 1.0
-STEP = 0.05
+STEP = 0.5 #0.05
 G = 6.7 * 1e-11
-N = 3
+N = 3 # extra param
 
 NAMESIN = []
 NAMESOUT = []
@@ -32,7 +32,7 @@ for i in range(1, N+1):
     NAMESIN += [f"pos{i}", f"velocity{i}", f"mass{i}"]
     NAMESOUT += [f"pos{i}", f"velocity{i}"]
 NAMESIN += ["t"]
-NAMESOUT += [f"{i}c" for i in range(1, N+1)]
+NAMESOUT += [f"{i}c" for i in range(1, N)]
 DATA = pandas.read_csv("input.txt", sep=';', header=None, names=NAMESIN).transpose()
 
 """ Distance between points a and b """
@@ -77,13 +77,21 @@ class Body:
         self.Movement = LineMovement(start, v)
         self.Mass = mass
         self.History = []
-        self.Merged = []
+
+    def __str__(self):
+        return "Body: "+str(self.Mass)+" at "+str(self.Movement.Position)
 
     def updateStep(self, force):
         acc = force / self.Mass
         self.History.append(self.Movement.Position)
         self.Movement.Position = self.Movement.getPosition(STEP, float(acc@acc))
-        self.Movement.setVelocity( numpy.array(self.Movement.Velocity) + force * STEP )
+        self.Movement.setVelocity( numpy.array(self.Movement.Velocity) + acc * STEP )
+
+    def sumGravity(self, others):
+        f = numpy.zeros(2)
+        for x in others:
+            f += self.gravity(x)
+        return f
 
     def gravity(self, other):
         angle = getVectorAngle(numpy.array(other.Movement.Position) - numpy.array(self.Movement.Position))
@@ -95,36 +103,42 @@ class Body:
         avgpos = numpy.array(self.Movement.Position) * self.Mass + numpy.array(other.Movement.Position) * other.Mass
         avgv = numpy.array(self.Movement.Velocity) * self.Mass + numpy.array(other.Movement.Velocity) * other.Mass
         combined = Body(tuple(avgpos / mass), mass, tuple(avgv / mass))
-        combined.Merged = self.Merged + [self, other]
         return combined
 
 def main(index, fhandle):
     print("-"*30, index+1, "-"*30)
     column = tuplify(DATA[index], NAMESIN, NAMESOUT)
     bodies = [ Body(column[f'pos{i}'], column[f'mass{i}'], column[f'velocity{i}']) for i in range(1, N+1) ]
-    bigbodies = []
+    print([str(b) for b in bodies])
+    stories = []
+    collisions = []
     # loop until all bodies merged
-    it = 0
-    while len(bodies) > 0 and it < 100000:
+    while len(bodies) > 1:
+        for x in range(0, len(bodies)):
+            bodies[x].updateStep(bodies[x].sumGravity(bodies[:x] + bodies[x+1:]))
         for x in bodies:
-            f = numpy.array([0.0,0.0])
-            for y in bodies + bigbodies:
-                if y != x:
-                    if normDistance(y.Movement.Position, x.Movement.Position) < MARGIN:
-                        bigbodies.append(x.combineBody(y))
-                    else:
-                        f += x.gravity(y)
-            x.updateStep(f)
-        it += 1
-    print(it)
+            for y in bodies:
+                if x != y and normDistance(y.Movement.Position, x.Movement.Position) < MARGIN:
+                    bodies.append(x.combineBody(y))
+                    collisions.append(bodies[-1].Movement.Position)
+                    stories.append((x.History, x.Mass))
+                    bodies.remove(x)
+                    stories.append((y.History, y.Mass))
+                    bodies.remove(y)
+    print([str(b) for b in bodies])
     # write files
     plt.clf()
-    #plt.plot(X, Y)
+    for c in collisions:
+        plt.plot(*c, 'ro')
+    for stry in stories:
+        plt.plot([s[0] for s in stry[0]], [s[1] for s in stry[0]], label=stry[1])
+    plt.legend()
     plt.savefig("{}.png".format(index+1))
-    summary = [(0,0), [0,0]]*N + [(0,0), (0,0)]
+    summary = [(0,0), [0,0]]*N + [(0,0),]*(N-1)
+    print(summary)
     fhandle.write(str(summary[0]))
     for i in range(1, len(summary)):
-        fhandle.write(';{0}'.format(summary[i]))
+        fhandle.write('; {0}'.format(summary[i]))
     fhandle.write('\n')
 
 if __name__=="__main__":
