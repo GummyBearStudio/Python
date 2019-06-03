@@ -22,7 +22,7 @@ def tuplify(c, nms, tup):
 # PHYSICS
 
 MARGIN = 1.0
-STEP = 0.5 #0.05
+STEP = 0.05
 G = 6.7 * 1e-11
 N = 3 # extra param
 
