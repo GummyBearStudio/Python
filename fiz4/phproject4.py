@@ -110,10 +110,13 @@ def main(index, fhandle):
     column = tuplify(DATA[index], NAMESIN, NAMESOUT)
     bodies = [ Body(column[f'pos{i}'], column[f'mass{i}'], column[f'velocity{i}']) for i in range(1, N+1) ]
     print([str(b) for b in bodies])
+    print("Sim duration: {0}".format(column['t']))
     stories = []
     collisions = []
+    elapsed = 0.0
     # loop until all bodies merged
-    while len(bodies) > 1:
+    while len(bodies) > 1 and elapsed < column['t']:
+        elapsed += STEP
         for x in range(0, len(bodies)):
             bodies[x].updateStep(bodies[x].sumGravity(bodies[:x] + bodies[x+1:]))
         for x in bodies:
@@ -135,6 +138,8 @@ def main(index, fhandle):
     plt.legend()
     plt.savefig("{}.png".format(index+1))
     summary = [(0,0), [0,0]]*N + [(0,0),]*(N-1)
+    for i in range(0, len(collisions)):
+        summary[len(summary)-N+1+i] = (round(collisions[i][0], 2), round(collisions[i][1], 2))
     print(summary)
     fhandle.write(str(summary[0]))
     for i in range(1, len(summary)):
